@@ -74,7 +74,7 @@ class SentenceUnpacker(object):
     def _read_cur_sentence(self, size):
         r = self._sentence[self._sentence_o:self._sentence_o + size]
         if not r:
-            raise UnpackValueError('Unexpected byte sequence')
+            raise UnpackValueError('Unexpected byte sequence: %s' % r)
         self._sentence_o += size
         return r
 

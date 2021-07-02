@@ -147,6 +147,12 @@ class ApiRosConnection:
         """
         return {'code': code, 'message': message}
 
+    async def read_full_answer(self):
+        data = await self.read(full_answer=True, parse=False)
+        unpacker = SentenceUnpacker()
+        unpacker.feed(data)
+        return [parse_sentence(sentence) for sentence in unpacker]
+
     async def read(self, parse=True, full_answer=False,
                    length=DEFAULT_READ_DATA_LEN):
         """
@@ -175,7 +181,7 @@ class ApiRosConnection:
             else:
                 byte_res += data
 
-            if '!done' in data.decode():
+            if b'!done' in data:
                 res = list_res if parse else byte_res
                 break
 

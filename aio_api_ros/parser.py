@@ -41,7 +41,7 @@ def parse_word(word, cast_int=True, cast_bool=True):
 def parse_sentence(sentence, cast_int=True, cast_bool=True):
     reply_word = sentence[0]
     if not reply_word.startswith('!'):
-        raise ParseException('Unexpected reply word')
+        raise ParseException('Unexpected reply word: %s' % reply_word)
     if len(sentence) > 1 and sentence[1].startswith('.tag'):
         tag_word = parse_word(sentence[1], cast_int=False, cast_bool=False)[1]
         words = sentence[2:]
