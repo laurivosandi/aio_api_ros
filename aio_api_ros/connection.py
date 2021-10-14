@@ -1,7 +1,6 @@
 import asyncio
 import hashlib
 import binascii
-import uuid
 
 from .errors import LoginFailed
 from .errors import UnpackValueError
@@ -18,38 +17,26 @@ class ApiRosConnection:
     """
     Connection to Mikrotik api
     """
-    def __init__(self, mk_ip: str, mk_port: int, mk_user: str, mk_psw: str,
-                 loop=None):
+    def __init__(self, mk_ip: str, mk_port: int, mk_user: str, mk_psw: str):
         if not all([mk_ip, mk_port, mk_user, mk_psw]):
             raise RuntimeError('Wrong connection params!')
         self.ip = mk_ip
         self.port = mk_port
         self.user = mk_user
         self.password = mk_psw
-        self.writer = None
-        self.reader = None
-        self._loop = loop
-        self._uuid = uuid.uuid1()
         self.used = False
+
+    async def connect(self):
+        self.reader, self.writer = await asyncio.open_connection(
+            self.ip, self.port
+        )
+        await self.login()
 
     def __del__(self):
         self.close()
 
     def __repr__(self):
-        return 'Connection to %s:%s id=%s' % (self.ip, self.port, self.uuid)
-
-    async def connect(self):
-        self.reader, self.writer = await asyncio.open_connection(
-            self.ip, self.port, loop=self._loop
-        )
-
-    @property
-    def uuid(self):
-        """
-        uuid of connection
-        :return: str
-        """
-        return self._uuid
+        return 'Connection to %s:%s id=%s' % (self.ip, self.port)
 
     @staticmethod
     def _to_bytes(str_value: str):
