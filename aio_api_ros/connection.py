@@ -12,7 +12,6 @@ FATAL_ERROR_TAG = '!fatal'
 DEFAULT_READ_DATA_LEN = 4096
 LOGIN_DATA_LEN = 128
 
-
 class ApiRosConnection:
     """
     Connection to Mikrotik api
@@ -134,54 +133,35 @@ class ApiRosConnection:
         """
         return {'code': code, 'message': message}
 
-    async def read_full_answer(self):
-        data = await self.read(full_answer=True, parse=False)
+    async def query(self, path, *args, optional=False):
+        self.talk_sentence((path,) + args)
+        data = await self.read()
         unpacker = SentenceUnpacker()
         unpacker.feed(data)
-        return [parse_sentence(sentence) for sentence in unpacker]
+        for sentence in unpacker:
+            resp, _, obj = parse_sentence(sentence)
+            if resp == "!trap":
+                if optional and obj["message"] == "no such command prefix":
+                    return
+                raise Exception("Caught trap while querying %s %s" % (path, obj))
+            if resp == "!done":
+                break
+            yield obj
 
-    async def read(self, parse=True, full_answer=False,
-                   length=DEFAULT_READ_DATA_LEN):
+    async def read(self, length=DEFAULT_READ_DATA_LEN):
         """
         Read response from api
-        :param parse:
-        :param full_answer:
         :param length:
         :return:
         """
-        byte_res = b''
-        list_res = []
+        res = b''
         while True:
-
             data = await self.reader.read(length)
-            if data == b'':
+            if not data:
                 break
-            if parse:
-                try:
-
-                    parsed_data = self._parse_sentence(data, full_answer)
-                    list_res += parsed_data
-                    byte_res += data
-
-                except UnpackValueError:
-                    parse = False
-            else:
-                byte_res += data
-
+            res += data
             if b'!done' in data:
-                res = list_res if parse else byte_res
                 break
-
-        return res
-
-    @staticmethod
-    def _parse_sentence(data, full_answer=False):
-        unpacker = SentenceUnpacker()
-        unpacker.feed(data)
-        res = [
-            parse_sentence(sentence) if full_answer
-            else parse_sentence(sentence)[2] for sentence in unpacker
-        ]
         return res
 
     async def login(self):
@@ -223,7 +203,7 @@ class ApiRosConnection:
             '=password={}'.format(client_psw),
         ]
         self.talk_sentence(sentence)
-        data = await self.read(parse=False)
+        data = await self.read()
 
         # login failed
         if ERROR_TAG in data.decode():
