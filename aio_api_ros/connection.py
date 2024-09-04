@@ -24,6 +24,7 @@ class ApiRosConnection:
         self.user = mk_user
         self.password = mk_psw
         self.used = False
+        self.writer = None
 
     async def connect(self):
         self.reader, self.writer = await asyncio.open_connection(
@@ -83,7 +84,8 @@ class ApiRosConnection:
         Close connection
         :return:
         """
-        self.writer.close()
+        if self.writer:
+            self.writer.close()
 
     def _get_login_sentence(self):
         """
