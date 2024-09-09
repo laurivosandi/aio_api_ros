@@ -36,7 +36,7 @@ class ApiRosConnection:
         self.close()
 
     def __repr__(self):
-        return 'Connection to %s:%s id=%s' % (self.ip, self.port)
+        return 'Connection to %s:%s id=%s' % (self.ip, self.port, id(self))
 
     @staticmethod
     def _to_bytes(str_value: str):
