@@ -24,13 +24,29 @@ class ApiRosConnection:
         self.user = mk_user
         self.password = mk_psw
         self.used = False
-        self.writer = None
+        self.authenticated = False
+        self.writer = self.reader = None
 
     async def connect(self):
-        self.reader, self.writer = await asyncio.open_connection(
-            self.ip, self.port
-        )
-        await self.login()
+        if not self.writer:
+            self.reader, self.writer = await asyncio.open_connection(
+                self.ip, self.port)
+
+        if not self.authenticated:
+            await self.talk_sentence([
+                "/login",
+                "=name=" + self.user,
+                "=password=" + self.password
+            ])
+            data = await self.reader.read(LOGIN_DATA_LEN)
+
+            # login failed
+            if ERROR_TAG in data.decode():
+                raise LoginFailed(self._get_err_message(data))
+
+            if FATAL_ERROR_TAG in data.decode():
+                raise LoginFailed(self._get_err_message(data))
+            self.authenticated = True
 
     def __del__(self):
         self.close()
@@ -69,7 +85,7 @@ class ApiRosConnection:
         if send_end:
             self._talk_end()
 
-    def talk_sentence(self, sentence: list):
+    async def talk_sentence(self, sentence: list):
         """
         Send list of commands
         :param sentence: Send list of commands
@@ -78,6 +94,7 @@ class ApiRosConnection:
         for word in sentence:
             self.talk_word(word, False)
         self._talk_end()
+        await self.writer.drain()
 
     def close(self):
         """
@@ -86,18 +103,6 @@ class ApiRosConnection:
         """
         if self.writer:
             self.writer.close()
-
-    def _get_login_sentence(self):
-        """
-        Perform login sentence  with challenge argument
-        :param challenge_arg:
-        :return:
-        """
-        return [
-            "/login",
-            "=name=" + self.user,
-            "=password=" + self.password
-        ]
 
     @staticmethod
     def _get_err_message(data):
@@ -108,35 +113,8 @@ class ApiRosConnection:
         """
         return data.decode().split('=message=')[1].split('\x00')[0]
 
-    @staticmethod
-    def _get_challenge_arg(data):
-        """
-        Parse from mikrotik response challenge argument
-        :param data:
-        :return:
-        """
-        try:
-            response_str = data.decode('UTF-8', 'replace')
-            res_list = response_str.split('!done')
-            str_val = res_list[1]
-            res_list = str_val.split('%=ret=')
-            res = str(res_list[1])
-        except IndexError:
-            raise LoginFailed('Getting challenge argument failed')
-        return res
-
-    @staticmethod
-    def _get_result_dict(code: int, message: str) -> dict:
-        """
-        Return dict like {'code': 0, 'message': 'OK}
-        :param code:
-        :param message:
-        :return:
-        """
-        return {'code': code, 'message': message}
-
     async def query(self, path, *args, optional=False):
-        self.talk_sentence((path,) + args)
+        await self.talk_sentence((path,) + args)
         data = await self.read()
         unpacker = SentenceUnpacker()
         unpacker.feed(data)
@@ -165,52 +143,3 @@ class ApiRosConnection:
             if b'!done' in data:
                 break
         return res
-
-    async def login(self):
-        """
-        Login to api
-        :return:
-        """
-        try:
-            login_sentence = self._get_login_sentence()
-            self.talk_sentence(login_sentence)
-            # await self.writer.drain()
-            data = await self.reader.read(LOGIN_DATA_LEN)
-
-            # login failed
-            if ERROR_TAG in data.decode():
-                raise LoginFailed(self._get_err_message(data))
-
-            if FATAL_ERROR_TAG in data.decode():
-                raise LoginFailed(self._get_err_message(data))
-
-            return data
-
-        except ConnectionResetError:
-            raise LoginFailed('Connection reset by peer')
-
-    async def login_client(self, client_ip: str, client_login: str,
-                           client_psw: str):
-        """
-        Login client to mikrotik
-        :param client_ip:
-        :param client_login:
-        :param client_psw:
-        :return:
-        """
-        sentence = [
-            '/ip/hotspot/active/login',
-            '=ip={}'.format(client_ip),
-            '=user={}'.format(client_login),
-            '=password={}'.format(client_psw),
-        ]
-        self.talk_sentence(sentence)
-        data = await self.read()
-
-        # login failed
-        if ERROR_TAG in data.decode():
-            result = self._get_result_dict(-1, self._get_err_message(data))
-
-        else:
-            result = self._get_result_dict(0, 'OK')
-        return result
